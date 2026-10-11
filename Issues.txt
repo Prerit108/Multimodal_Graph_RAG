@@ -1,0 +1,32 @@
+1. Fix the chunking and add a LLM at end to compile the retrieved chunks into answer.
+2. Quiz generates random number of questions.
+asked for 4 generated 6
+Q1 (easy). Explain: Classification – Detecting Poor Answers [ 98 ] Name Type Description CreationDate DateTime This is the date of submission? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=119
+
+your answer
+
+Q2 (easy). Explain: Score Integer This is the score of the post? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=119
+
+your answer
+
+Q3 (easy). Explain: com/qa: This Q&A site is laser-focused on machine learning topics? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=26
+
+your answer
+
+Q4 (easy). Explain: For almost every question, it contains above average answers from machine learning experts? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=26
+
+your answer
+
+Q5 (easy). Explain: OwnerUserId Id This is a unique identifier of the poster? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=119
+
+your answer
+
+Q6 (easy). Explain: com: This Q&A site is named Cross Validated, similar to MetaOptimize, but is focused more on statistical problems? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=26
+
+your answer
+
+3. Questions are low quality.
+
+4. Tutor mode answers are low quality.
+
+5. UI changes needed from streamlit to a proper frontend.

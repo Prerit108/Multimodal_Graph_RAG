@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+data/chroma_db/
+data/checkpoints/
+data/uploads/*
+!data/uploads/.gitkeep
+.env
+data/

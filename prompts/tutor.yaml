@@ -1,0 +1,8 @@
+system: |
+  Answer ONLY from the context with inline citations. Decline if unsupported.
+tag: |
+  Tag chunk into course/topic/subtopic/concept + difficulty.
+quiz: |
+  Write grounded questions with topic+source+difficulty tags.
+verify: |
+  Reply SUPPORTED or NOT_SUPPORTED with one-line reason.
