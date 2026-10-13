@@ -1,0 +1,454 @@
+{
+  "$schema": "design-tokens-v1",
+  "$description": "Design tokens extracted from visual reference board: cozy study-desk aesthetic blending warm editorial library tones with focused late-night ambience and pastel organizational accents.",
+  "$sources": [
+    "inspo/Experiencias en Londres.jpg",
+    "inspo/last 24 hours.jpg",
+    "inspo/Library Style Workspace.jpg",
+    "inspo/Study Corner Ideas for Small Bedrooms.jpg"
+  ],
+
+  "color": {
+    "$description": "Dual-mode palette anchored on warm wood tones, amber lamplight, and deep shadow — with a softer cream/pastel alternate mode.",
+
+    "dark": {
+      "background": {
+        "base":    "#121010",
+        "raised":  "#1C1917",
+        "surface": "#292524",
+        "overlay": "#3B3633"
+      },
+      "text": {
+        "primary":   "#FAF5F0",
+        "secondary": "#C8B9A8",
+        "muted":     "#8A7E72",
+        "inverse":   "#1C1917"
+      },
+      "accent": {
+        "amber":      "#E8A849",
+        "sunset":     "#D4714E",
+        "candleglow": "#F5C882",
+        "rose":       "#C9707D",
+        "sage":       "#7A9E7E"
+      },
+      "semantic": {
+        "success": "#7A9E7E",
+        "warning": "#E8A849",
+        "error":   "#C9707D",
+        "info":    "#7DA1C4"
+      }
+    },
+
+    "light": {
+      "background": {
+        "base":    "#FAF7F2",
+        "raised":  "#FFFFFF",
+        "surface": "#F0EBE3",
+        "overlay": "#E8E0D4"
+      },
+      "text": {
+        "primary":   "#1C1917",
+        "secondary": "#57534E",
+        "muted":     "#A8A29E",
+        "inverse":   "#FAF5F0"
+      },
+      "accent": {
+        "amber":      "#C77D1A",
+        "sunset":     "#B85636",
+        "candleglow": "#D4A54A",
+        "rose":       "#B45A67",
+        "sage":       "#5C7F5E"
+      },
+      "semantic": {
+        "success": "#5C7F5E",
+        "warning": "#C77D1A",
+        "error":   "#B45A67",
+        "info":    "#5A82A6"
+      }
+    },
+
+    "pastel": {
+      "$description": "Pastel sticky-note accent palette from the Study Corner reference.",
+      "pink":   "#F5C6D0",
+      "yellow": "#F9E6A0",
+      "green":  "#BCE4C6",
+      "blue":   "#B3D4F0",
+      "lilac":  "#D4BDE6",
+      "peach":  "#F5D2B8"
+    },
+
+    "gradients": {
+      "goldenHour": {
+        "type": "linear",
+        "angle": 135,
+        "stops": [
+          { "color": "#E8A849", "position": "0%" },
+          { "color": "#D4714E", "position": "50%" },
+          { "color": "#8B3A62", "position": "100%" }
+        ],
+        "$description": "Sunset gradient from the Londres window backdrop."
+      },
+      "warmVignette": {
+        "type": "radial",
+        "shape": "ellipse at center",
+        "stops": [
+          { "color": "rgba(18, 16, 16, 0)",   "position": "30%" },
+          { "color": "rgba(18, 16, 16, 0.65)", "position": "100%" }
+        ],
+        "$description": "Vignette darkening toward edges, simulating lamp falloff."
+      },
+      "shelfGlow": {
+        "type": "linear",
+        "angle": 180,
+        "stops": [
+          { "color": "rgba(245, 200, 130, 0.12)", "position": "0%" },
+          { "color": "rgba(245, 200, 130, 0)",    "position": "100%" }
+        ],
+        "$description": "Subtle warm under-shelf LED strip glow."
+      },
+      "ambientSurface": {
+        "type": "linear",
+        "angle": 160,
+        "stops": [
+          { "color": "#292524", "position": "0%" },
+          { "color": "#1C1917", "position": "100%" }
+        ],
+        "$description": "Quiet dark surface gradient for card backgrounds."
+      }
+    },
+
+    "shadows": {
+      "lampGlow":      "0 0 80px 20px rgba(232, 168, 73, 0.15)",
+      "candleFlicker": "0 0 40px 10px rgba(245, 200, 130, 0.10)",
+      "elevation1":    "0 1px 3px rgba(18, 16, 16, 0.12), 0 1px 2px rgba(18, 16, 16, 0.08)",
+      "elevation2":    "0 4px 12px rgba(18, 16, 16, 0.16), 0 2px 4px rgba(18, 16, 16, 0.10)",
+      "elevation3":    "0 12px 32px rgba(18, 16, 16, 0.24), 0 4px 8px rgba(18, 16, 16, 0.12)",
+      "elevation4":    "0 24px 64px rgba(18, 16, 16, 0.32), 0 8px 16px rgba(18, 16, 16, 0.16)",
+      "innerGlow":     "inset 0 1px 0 rgba(245, 200, 130, 0.06)",
+      "$description":  "Warm-tinted shadows that reinforce the lamplight ambience."
+    }
+  },
+
+  "typography": {
+    "$description": "Scholarly-yet-cozy type stack — a refined serif display face paired with a crisp humanist sans-serif body.",
+
+    "fontFamilies": {
+      "display":     "'DM Serif Display', 'Playfair Display', Georgia, serif",
+      "body":        "'Inter', 'Source Sans 3', -apple-system, sans-serif",
+      "mono":        "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+      "handwritten": "'Caveat', 'Patrick Hand', cursive"
+    },
+
+    "fontWeights": {
+      "light":    300,
+      "regular":  400,
+      "medium":   500,
+      "semibold": 600,
+      "bold":     700
+    },
+
+    "scale": {
+      "xs":  { "fontSize": "0.75rem",  "lineHeight": 1.5,  "letterSpacing": "0.02em"   },
+      "sm":  { "fontSize": "0.875rem", "lineHeight": 1.5,  "letterSpacing": "0.01em"   },
+      "base":{ "fontSize": "1rem",     "lineHeight": 1.6,  "letterSpacing": "0em"      },
+      "lg":  { "fontSize": "1.125rem", "lineHeight": 1.55, "letterSpacing": "-0.005em" },
+      "xl":  { "fontSize": "1.25rem",  "lineHeight": 1.5,  "letterSpacing": "-0.01em"  },
+      "2xl": { "fontSize": "1.5rem",   "lineHeight": 1.4,  "letterSpacing": "-0.015em" },
+      "3xl": { "fontSize": "1.875rem", "lineHeight": 1.35, "letterSpacing": "-0.02em"  },
+      "4xl": { "fontSize": "2.25rem",  "lineHeight": 1.25, "letterSpacing": "-0.025em" },
+      "5xl": { "fontSize": "3rem",     "lineHeight": 1.15, "letterSpacing": "-0.03em"  },
+      "6xl": { "fontSize": "3.75rem",  "lineHeight": 1.1,  "letterSpacing": "-0.035em" }
+    },
+
+    "googleFontsImport": "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@400;600&display=swap"
+  },
+
+  "layout": {
+    "$description": "Bento-grid-inspired layout with asymmetric card arrangements, echoing the layered desk surfaces and corkboard pinning.",
+
+    "grid": {
+      "type": "bento",
+      "columns": {
+        "default": 12,
+        "md":      8,
+        "sm":      4
+      },
+      "gap": "1rem",
+      "maxWidth": "1280px",
+      "patterns": {
+        "heroSplit":         "span 8 / span 4",
+        "twoThirdsOneThird": "span 8 / span 4",
+        "halfHalf":          "span 6 / span 6",
+        "tripleCard":        "span 4 / span 4 / span 4",
+        "featureStack":      "span 12 then span 6 / span 6",
+        "stickyNote":        "span 3"
+      }
+    },
+
+    "breakpoints": {
+      "sm":  "640px",
+      "md":  "768px",
+      "lg":  "1024px",
+      "xl":  "1280px",
+      "2xl": "1536px"
+    },
+
+    "spacing": {
+      "$description": "8px base unit scale.",
+      "0":    "0",
+      "px":   "1px",
+      "0.5":  "0.125rem",
+      "1":    "0.25rem",
+      "1.5":  "0.375rem",
+      "2":    "0.5rem",
+      "3":    "0.75rem",
+      "4":    "1rem",
+      "5":    "1.25rem",
+      "6":    "1.5rem",
+      "8":    "2rem",
+      "10":   "2.5rem",
+      "12":   "3rem",
+      "16":   "4rem",
+      "20":   "5rem",
+      "24":   "6rem",
+      "32":   "8rem"
+    },
+
+    "borderRadius": {
+      "none": "0",
+      "sm":   "0.25rem",
+      "md":   "0.5rem",
+      "lg":   "0.75rem",
+      "xl":   "1rem",
+      "2xl":  "1.25rem",
+      "3xl":  "1.5rem",
+      "full": "9999px",
+      "$description": "Slightly rounded corners echoing the soft edges of notebooks and sticky notes — never harsh or fully square."
+    },
+
+    "elevation": {
+      "flat":     { "shadow": "none",       "zIndex": 0    },
+      "surface":  { "shadow": "elevation1", "zIndex": 1    },
+      "raised":   { "shadow": "elevation2", "zIndex": 10   },
+      "floating": { "shadow": "elevation3", "zIndex": 100  },
+      "modal":    { "shadow": "elevation4", "zIndex": 1000 },
+      "overlay":  { "shadow": "elevation4", "zIndex": 9999 }
+    }
+  },
+
+  "aestheticDirection": {
+    "moodKeywords": [
+      "cozy dark mode",
+      "warm minimal",
+      "scholarly editorial",
+      "lofi study aesthetic",
+      "golden-hour ambience",
+      "candlelit focus",
+      "library den",
+      "handwritten personality",
+      "organized chaos",
+      "lived-in digital"
+    ],
+
+    "materialLanguage": {
+      "$description": "Physical textures to translate into digital surfaces.",
+      "primary":   "Dark walnut wood grain",
+      "secondary": "Warm cream parchment / linen",
+      "tertiary":  "Aged leather (cognac/caramel)",
+      "accent":    "Cork / pegboard texture",
+      "highlight": "Frosted glass with warm backlight"
+    },
+
+    "microInteractions": {
+      "hoverGlow": {
+        "description": "Soft warm radial glow on hover, simulating lamplight spilling onto the element.",
+        "css": "box-shadow: 0 0 30px rgba(232, 168, 73, 0.12); transform: translateY(-2px); transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);"
+      },
+      "cardLift": {
+        "description": "Gentle upward lift with deepening shadow on hover, like lifting a notebook off the desk.",
+        "css": "transform: translateY(-4px); box-shadow: 0 12px 32px rgba(18, 16, 16, 0.2); transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);"
+      },
+      "stickyNotePeel": {
+        "description": "Slight rotation and lift on hover, like peeling a sticky note.",
+        "css": "transform: rotate(-1.5deg) translateY(-3px) scale(1.02); transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);"
+      },
+      "pageFlip": {
+        "description": "Subtle 3D rotate on horizontal axis for page-like transitions.",
+        "css": "transform: perspective(800px) rotateX(2deg); transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);"
+      },
+      "candleFlicker": {
+        "description": "Gentle pulsing opacity on ambient glow elements.",
+        "keyframes": "candleFlicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }",
+        "css": "animation: candleFlicker 3s ease-in-out infinite;"
+      },
+      "fadeInUp": {
+        "description": "Content entrance: fade in from below with a warm spring ease.",
+        "keyframes": "fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }",
+        "css": "animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;"
+      }
+    },
+
+    "transitionCurves": {
+      "default": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "springy": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "gentle":  "cubic-bezier(0.4, 0, 0.2, 1)",
+      "snappy":  "cubic-bezier(0.0, 0, 0.2, 1)"
+    },
+
+    "transitionDurations": {
+      "instant":  "100ms",
+      "fast":     "200ms",
+      "normal":   "350ms",
+      "slow":     "500ms",
+      "dramatic": "800ms"
+    }
+  },
+
+  "components": {
+    "$description": "Primary UI elements identified across the four reference images.",
+
+    "heroCard": {
+      "description": "Large featured content card (span 8+ columns). Full-bleed background image with warm vignette overlay, prominent display-serif headline, and a subtle inner glow border.",
+      "inspiration": "The Londres sunset desktop with layered notebooks and glowing laptop screen.",
+      "tokens": {
+        "borderRadius": "xl",
+        "padding": "spacing.8",
+        "background": "gradients.ambientSurface",
+        "overlay": "gradients.warmVignette"
+      }
+    },
+
+    "stickyNoteCard": {
+      "description": "Small square card with pastel background, handwritten-font text, and a slight CSS rotation. Used for quick tips, reminders, or status blurbs.",
+      "inspiration": "Pastel sticky notes on corkboard and pegboard in Londres and Study Corner.",
+      "tokens": {
+        "borderRadius": "md",
+        "padding": "spacing.4",
+        "rotation": "random(-2deg, 2deg)",
+        "fontFamily": "handwritten",
+        "background": "color.pastel.*"
+      }
+    },
+
+    "corkboardPanel": {
+      "description": "A textured panel acting as a pinboard for multiple small items. Cork or linen background with subtle noise texture.",
+      "inspiration": "The corkboard wall in the Londres reference.",
+      "tokens": {
+        "borderRadius": "lg",
+        "padding": "spacing.6",
+        "background": "#C19A6B with 5% noise overlay",
+        "shadow": "elevation2"
+      }
+    },
+
+    "glowLampWidget": {
+      "description": "A circular or oval ambient glow element positioned near key content, acting as a warm focal-point light source.",
+      "inspiration": "Desk lamps in all four images — warm light pooling on surfaces.",
+      "tokens": {
+        "size": "80px to 120px",
+        "background": "radial-gradient(circle, rgba(245,200,130,0.2) 0%, transparent 70%)",
+        "animation": "candleFlicker",
+        "blendMode": "screen"
+      }
+    },
+
+    "verticalNavSidebar": {
+      "description": "Narrow dark sidebar navigation with icon-first items and warm amber active indicator.",
+      "inspiration": "The vertical bookshelf structure in the Library Workspace.",
+      "tokens": {
+        "width": "64px expanded to 240px",
+        "background": "color.dark.background.raised",
+        "activeIndicator": "color.accent.amber",
+        "borderRadius": "none (flush) or lg (floating)",
+        "transition": "transitionCurves.default, 350ms"
+      }
+    },
+
+    "statusBadge": {
+      "description": "Small inline badge with rounded-full corners, used for labels like 'In Progress', 'Due Today', 'Focus Mode'. Pastel or semantic color background.",
+      "inspiration": "Colored tabs/bookmarks on textbooks in the Late Night reference.",
+      "tokens": {
+        "borderRadius": "full",
+        "padding": "spacing.1 spacing.3",
+        "fontSize": "scale.xs",
+        "fontWeight": "medium",
+        "background": "color.semantic.* at 15% opacity"
+      }
+    },
+
+    "digitalClockDisplay": {
+      "description": "Prominent clock/timer widget with large monospace numerals on a dark background, subtle inner glow.",
+      "inspiration": "The digital clock reading 02:14 AM and the 07:30 display.",
+      "tokens": {
+        "fontFamily": "mono",
+        "fontSize": "scale.5xl",
+        "fontWeight": "bold",
+        "color": "color.dark.text.primary",
+        "background": "color.dark.background.base",
+        "borderRadius": "xl",
+        "shadow": "innerGlow"
+      }
+    },
+
+    "progressTracker": {
+      "description": "A weekly-planner-style tracker with day labels and checkbox/progress indicators. To-do list format.",
+      "inspiration": "The 'Weekly Plan: Mon to Sun' corkboard note and the to-do checklist.",
+      "tokens": {
+        "layout": "vertical stack",
+        "gap": "spacing.2",
+        "checkboxAccent": "color.accent.sage",
+        "fontFamily": "handwritten or body",
+        "borderRadius": "md"
+      }
+    },
+
+    "ambientBackdrop": {
+      "description": "Full-viewport background layer with a slow-moving gradient or blurred image, providing the 'window view' atmospheric depth.",
+      "inspiration": "The sunset/city-light window views in Londres and Late Night.",
+      "tokens": {
+        "background": "gradients.goldenHour",
+        "filter": "blur(60px) saturate(1.2)",
+        "opacity": 0.15,
+        "position": "fixed",
+        "zIndex": -1
+      }
+    },
+
+    "shelfRow": {
+      "description": "Horizontal scrollable row of book-spine-like items (cards, resources, etc.) with warm under-lighting.",
+      "inspiration": "The library bookshelves with LED strip lighting in Library Workspace.",
+      "tokens": {
+        "layout": "horizontal scroll / flex row",
+        "gap": "spacing.3",
+        "underGlow": "gradients.shelfGlow",
+        "itemBorderRadius": "sm",
+        "itemPadding": "spacing.4 spacing.3"
+      }
+    },
+
+    "notebookEditor": {
+      "description": "A rich-text or markdown area styled like an open spiral notebook — lined or grid background, handwritten feel.",
+      "inspiration": "The open notebooks with handwritten notes in Londres and Study Corner.",
+      "tokens": {
+        "background": "#FFFEF8",
+        "lineColor": "rgba(0,0,0,0.06)",
+        "fontFamily": "body or handwritten",
+        "padding": "spacing.8",
+        "borderRadius": "lg",
+        "shadow": "elevation2"
+      }
+    },
+
+    "motivationalBanner": {
+      "description": "A decorative text banner with an inspirational quote, displayed in serif/handwritten typography with gentle animation.",
+      "inspiration": "The 'Dream Big', 'Trust The Process', and 'Breathe. Study. Achieve.' elements.",
+      "tokens": {
+        "fontFamily": "display or handwritten",
+        "fontSize": "scale.2xl",
+        "textAlign": "center",
+        "color": "color.dark.text.secondary",
+        "animation": "fadeInUp"
+      }
+    }
+  }
+}

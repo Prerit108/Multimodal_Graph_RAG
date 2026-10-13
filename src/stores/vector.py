@@ -1,5 +1,6 @@
 """Vector store via LangChain only. Chroma default (installed); Qdrant optional."""
 from __future__ import annotations
+from pathlib import Path
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from src.chains.models import get_embeddings
@@ -32,6 +33,9 @@ def hybrid_search(query: str, k: int = 6, topic: str | None = None) -> list[Docu
     """Dense (Chroma) + BM25 (in-memory) -> cross-encoder rerank on CPU -> top-k."""
     from src.chains.reranker import bm25_search, rerank
     s = get_settings()
+    if s.VECTOR_BACKEND != "qdrant" and not Path(s.CHROMA_DIR).exists():
+        return []
+
     store = get_store()
     filt = {"topic": topic} if topic else None
     dense: list[Document] = []

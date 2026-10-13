@@ -121,8 +121,21 @@ $PY scripts/smoke.py
 
 ### 1. Backend — FastAPI (port 8000)
 
+On Windows, create a project-local Conda environment using Python 3.11
+(the checked-in `.conda` folder in this workspace is an empty Python 3.14 environment):
+
+```powershell
+& "$env:USERPROFILE\anaconda3\Scripts\conda.exe" create --prefix .backend-env python=3.11 pip -y
+.\.backend-env\python.exe -m pip install --upgrade pip
+.\.backend-env\python.exe -m pip install -r requirements.txt
+.\.backend-env\python.exe -m uvicorn src.api.main:app --reload --reload-dir src --port 8050
+```
+
+Then confirm the backend at `http://localhost:8050/health` before submitting a query
+from the React page. Keep this terminal running while using the frontend.
+
 ```bash
-$PY -m uvicorn src.api.main:app --reload --port 8000
+$PY -m uvicorn src.api.main:app --reload --reload-dir src --port 8000
 # docs: http://localhost:8000/docs
 ```
 
@@ -151,20 +164,40 @@ $PY -m streamlit run src/ui/app.py --server.port 8501
 # open http://localhost:8501
 ```
 
-Tabs: **Upload** (G0 ingest PDF/PPTX/TXT) → **Tutor Chat** (G1, verdict + citations)
+Tabs: **Upload** (G0 ingest PDF/PPTX/TXT/images) → **Tutor Chat** (G1, verdict + citations)
 → **Quiz** (G2, scope + auto difficulty) → **Dashboard** (G3 BKT mastery JSON).
 Set `student_id` in the sidebar (used as LangGraph `thread_id` + BKT key).
 
-Run both together (two terminals):
+### 3. Layout studies — React + Tailwind
+
+The Phase 6 concepts use the tokens in `design-tokens.json`. Install the frontend
+dependencies and start the Vite preview:
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173/` for the editorial hero page, or `/compare` to review
+both layout concepts side by side. Visit `/variants/variant-a` (Bento Grid) and
+`/variants/variant-b` (Asymmetric Editorial) for their standalone views. Run
+`npm run build` to type-check and create a production build in `dist/`.
+
+The hero query card uploads documents through FastAPI `/ingest` and asks questions
+through `/chat`. The local Vite origins are enabled in FastAPI CORS; set
+`VITE_API_BASE_URL` if the API is hosted elsewhere. PDF, slides, text transcripts,
+and Docling-supported JPG/PNG images can be attached.
+
+Run the React frontend with the backend (two terminals):
 
 ```bash
 # terminal 1 — backend
-$PY -m uvicorn src.api.main:app --reload --port 8000
-# terminal 2 — frontend
-$PY -m streamlit run src/ui/app.py --server.port 8501
+.\.backend-env\python.exe -m uvicorn src.api.main:app --reload --reload-dir src --port 8000
+# terminal 2 — React frontend
+npm run dev
 ```
 
-### 3. Notebook — guided walkthrough (26 cells)
+### 4. Notebook — guided walkthrough (26 cells)
 
 ```bash
 $PY -m jupyter lab   # open workflow_walkthrough.ipynb, kernel: langchain_env, Run All
@@ -176,7 +209,7 @@ $PY -m jupyter nbconvert --to notebook --execute workflow_walkthrough.ipynb \
 Covers: setup → project map → CitationUnit → prompts → G0 ingest → Chroma/graph
 → G1 ask + refusal → G2 quiz + feedback → BKT → simulator → API routes.
 
-### 4. Eval
+### 5. Eval
 
 ```bash
 $PY -c "from src.eval.evaluate import simulate; import json; print(json.dumps(simulate(sessions=2), indent=2))"
@@ -219,4 +252,3 @@ $PY -c "from src.eval.evaluate import ragas_eval; print(ragas_eval())"
 - Offline-first: every LLM call is wrapped in try/except with a heuristic fallback, so the demo never blocks on keys.
 - Add `GOOGLE_API_KEY` + `OPENAI_API_KEY` to `.env` to enable LLM tagging / cited answering / verification.
 - Suggested extensions: prereq concept-map UI, flashcards for weak topics, forgetting-curve revision scheduler.
-

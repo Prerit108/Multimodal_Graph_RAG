@@ -22,6 +22,8 @@ def _kind(path: str) -> str:
         return "slides"
     if p.endswith((".txt", ".srt", ".vtt")):
         return "video_txt"
+    if p.endswith((".jpg", ".jpeg", ".png")):
+        return "image"
     return "pdf"
 
 
@@ -44,6 +46,12 @@ def n_load(state: IngestState) -> IngestState:
             docs.append(Document(page_content=txt,
                                  metadata={"source_file": os.path.basename(path),
                                            "content_type": "video", "t_start": 0.0}))
+        elif kind == "image":
+            from langchain_docling import DoclingLoader
+            docs = DoclingLoader(file_path=path).load()
+            for d in docs:
+                d.metadata.setdefault("source_file", os.path.basename(path))
+                d.metadata.setdefault("content_type", "image")
         else:  # pdf via Docling (primary)
             try:
                 from langchain_docling import DoclingLoader
