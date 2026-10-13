@@ -22,6 +22,8 @@ def _kind(path: str) -> str:
         return "slides"
     if p.endswith((".txt", ".srt", ".vtt")):
         return "video_txt"
+    if p.endswith((".jpg", ".jpeg", ".png")):
+        return "image"
     return "pdf"
 
 

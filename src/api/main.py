@@ -3,11 +3,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root (for `src.*`)
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import shutil, os
 
 app = FastAPI(title="Learning Companion (LangGraph RAG)")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 DATA = "data/uploads"
 os.makedirs(DATA, exist_ok=True)
@@ -28,13 +36,42 @@ class QuizIn(BaseModel):
 
 @app.post("/ingest")
 async def ingest(file: UploadFile = File(...)):
+    filename = Path(file.filename or "upload").name
+    supported = {".pdf", ".ppt", ".pptx", ".txt", ".srt", ".vtt", ".jpg", ".jpeg", ".png"}
+    if Path(filename).suffix.lower() not in supported:
+        raise HTTPException(status_code=415, detail="Supported files: PDF, PPT, PPTX, TXT, SRT, VTT, JPG, JPEG, PNG.")
+
     from src.graphs.ingest_graph import ingest_file
-    dest = os.path.join(DATA, file.filename)
+    dest = os.path.join(DATA, filename)
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
     out = ingest_file(dest)
-    return {"file": file.filename, "kind": out["kind"],
-            "units": len(out["units"]), "errors": out["errors"]}
+    if out["errors"]:
+        raise HTTPException(status_code=422, detail="; ".join(out["errors"]))
+    if not out["units"]:
+        raise HTTPException(status_code=422, detail="No readable content was found in the uploaded file.")
+    return {"file": filename, "kind": out["kind"],
+            "units": len(out["units"]), "errors": []}
+
+
+@app.get("/health")
+def health():
+    from src.config.settings import get_settings
+    from src.stores.graph import get_graph
+
+    settings = get_settings()
+    vector_backend = settings.VECTOR_BACKEND.lower()
+    if vector_backend == "chroma":
+        storage_state = "directory present · contents unverified" if Path(settings.CHROMA_DIR).exists() else "awaiting first document"
+    else:
+        storage_state = "URL configured" if settings.QDRANT_URL else "not configured"
+    return {
+        "graph_backend": "NetworkX",
+        "graph_nodes": get_graph().number_of_nodes(),
+        "vector_backend": vector_backend,
+        "vector_storage_state": storage_state,
+        "retrieval_mode": "Hybrid · semantic + BM25 + graph context",
+    }
 
 
 @app.post("/chat")

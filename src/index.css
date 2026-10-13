@@ -1,0 +1,76 @@
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+@config "../tailwind.config.cjs";
+
+:root {
+  color-scheme: dark;
+  font-family: theme("fontFamily.body");
+  background: #121010;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #121010;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #e8a849;
+  outline-offset: 4px;
+}
+
+.cork-texture {
+  background-image:
+    radial-gradient(rgba(28, 25, 23, 0.26) 0.7px, transparent 0.7px),
+    linear-gradient(135deg, rgba(193, 154, 107, 0.95), rgba(121, 83, 56, 0.92));
+  background-size: 7px 7px, cover;
+}
+
+.paper-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 27px,
+    rgba(28, 25, 23, 0.1) 28px
+  );
+}
+
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in-up {
+    animation: fade-in-up 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .candle-flicker {
+    animation: candle-flicker 3s ease-in-out infinite;
+  }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes candle-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}

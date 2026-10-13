@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "higgsfield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@higgsfield/mcp-server"
+      ],
+      "env": {
+        "HIGGSFIELD_API_KEY": "3ae6f3b5-b811-4911-8dcd-0701ad047cc6:bcd3456df0f0b03d7af3561816de445a1889d7932c475e0fd65b43535f0d16f8"
+      }
+    },
+    "lmstudio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-openai-compatible"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "http://127.0.0.1:1234/v1",
+        "OPENAI_MODEL": "prism-ml/bonsai-27b"
+      }
+    }
+  }
+}
