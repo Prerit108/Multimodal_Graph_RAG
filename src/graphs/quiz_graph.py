@@ -1,10 +1,11 @@
 """G2 QuizGraph: scope -> retrieve -> generate -> verify -> dedup -> feedback -> BKT -> report."""
 from __future__ import annotations
 import hashlib, json, os
-from typing import TypedDict
+from typing import TypedDict, List
 from langgraph.graph import StateGraph, END
 from src.config.settings import get_settings
 from src.schemas.models import QuizQuestion
+from src.chains.prompts import QuizOutput, QuizQuestionItem
 
 
 class QuizState(TypedDict):
@@ -26,38 +27,76 @@ def n_scope(s: QuizState) -> QuizState:
 
 def n_generate(s: QuizState) -> QuizState:
     from src.stores.vector import hybrid_search
-    docs = hybrid_search(f"{s['scope']} {s['difficulty_target']} questions", k=6, topic=None)
-    ctx = "\n".join(d.page_content[:800] for d in docs)
-    src = docs[0].metadata.get("source_file", "") if docs else ""
+    n = s["n_questions"]
+    # Retrieve more docs for diversity, use topic filter if available
+    topic_filter = None  # could be enhanced to infer topic from scope
+    docs = hybrid_search(f"{s['scope']} {s['difficulty_target']} questions", k=max(8, n + 2), topic=topic_filter)
+    if not docs:
+        s["questions"] = []
+        return s
+    # Build context with per-doc source links
+    ctx_parts = []
+    doc_sources = []
+    for d in docs:
+        m = d.metadata
+        if m.get("page"):
+            src_link = f"{m.get('source_file', '')}#page={m['page']}"
+        elif m.get("slide"):
+            src_link = f"{m.get('source_file', '')}#slide={m['slide']}"
+        elif m.get("t_start") is not None:
+            mm, ss = divmod(int(m["t_start"]), 60)
+            src_link = f"{m.get('source_file', '')}?t={mm:02d}:{ss:02d}"
+        else:
+            src_link = m.get("source_file", "")
+        ctx_parts.append(f"[SOURCE: {src_link}]\n{d.page_content[:1200]}")
+        doc_sources.append(src_link)
+    ctx = "\n\n---\n\n".join(ctx_parts)
+    
     used_llm = False
+    cand = []
     try:
-        from src.chains.prompts import get_quiz_chain, _content
-        out = _content(get_quiz_chain().invoke(
-            {"n": s["n_questions"], "types": "MCQ/short/numerical",
+        from src.chains.prompts import get_quiz_chain
+        quiz_output = get_quiz_chain().invoke(
+            {"n": n, "types": "MCQ/short/numerical",
              "scope": s["scope"], "difficulty": s["difficulty_target"],
-             "context": ctx}))
-        cand = _parse_quiz_text(out, scope=s["scope"], difficulty=s["difficulty_target"],
-                                source=src, n=s["n_questions"])
+             "context": ctx})
+        # quiz_output is QuizOutput with structured questions
+        for item in quiz_output.questions[:n]:
+            stem = item.stem.strip()[:400]
+            key = item.answer_key.strip()[:300]
+            topic = item.topic.strip() or s["scope"]
+            src = item.src.strip() or (doc_sources[0] if doc_sources else "")
+            qtype = item.qtype.lower()
+            options = item.options if qtype == "mcq" else []
+            explanation = item.explanation or f"See {src}"
+            if len(stem) < 10:
+                continue
+            cand.append(QuizQuestion(
+                qtype=qtype, stem=stem, options=options, answer_key=key,
+                topic=topic, source=src, difficulty=s["difficulty_target"],
+                explanation=explanation))
         if not cand:
-            if not out.strip():
-                raise ValueError("empty LLM quiz output")  # -> offline fallback
-            cand = [QuizQuestion(qtype="short", stem=out[:500], answer_key="see context",
-                                 topic=s["scope"], source=src, difficulty=s["difficulty_target"],
-                                 explanation="Generated from retrieved context.")]
+            raise ValueError("no valid questions from structured output")
         used_llm = True
     except Exception:
-        # offline fallback: one question per DEFINITIONAL sentence (filtered).
-        # Raw chapter text contains URLs, fragments, mid-paragraph continuations
-        # ("Therefore, ...", "com: This Q&A site...") — never quiz those.
+        # offline fallback: use filtered sentences from retrieved docs
         cand = []
-        import random, re
+        import random
         random.shuffle(docs)
-        for i, d in enumerate(docs[:s["n_questions"] * 4]):
-            if len(cand) >= s["n_questions"]:
+        for d in docs[:n * 4]:
+            if len(cand) >= n:
                 break
             for sent in _quiz_worthy_sentences(d.page_content):
                 m = d.metadata
-                link = f"{m.get('source_file','')}" + (f"#page={m['page']}" if m.get("page") else "")
+                if m.get("page"):
+                    link = f"{m.get('source_file','')}#page={m['page']}"
+                elif m.get("slide"):
+                    link = f"{m.get('source_file','')}#slide={m['slide']}"
+                elif m.get("t_start") is not None:
+                    mm, ss = divmod(int(m["t_start"]), 60)
+                    link = f"{m.get('source_file','')}?t={mm:02d}:{ss:02d}"
+                else:
+                    link = m.get("source_file", "")
                 concept = _extract_concept(sent)
                 cand.append(QuizQuestion(
                     qtype="short",
@@ -65,63 +104,85 @@ def n_generate(s: QuizState) -> QuizState:
                     answer_key=sent, topic=d.metadata.get("topic", s["scope"]),
                     source=link, difficulty=s["difficulty_target"],
                     explanation=f"Key point: {sent[:200]} (See {link})"))
-                if len(cand) >= s["n_questions"]:
+                if len(cand) >= n:
                     break
         if not cand:
-            # strict filter found nothing quiz-worthy: relax once (allow longer
-            # subjects) rather than returning zero questions
-            for i, d in enumerate(docs[:s["n_questions"] * 2]):
+            # relaxed fallback: still apply basic junk filter
+            for d in docs[:n * 2]:
                 sents = [x.strip() for x in d.page_content.split(".") if 60 <= len(x.strip()) <= 300]
-                if not sents:
-                    continue
-                sent = " ".join(sents[i % len(sents)].split())[:300]
-                m = d.metadata
-                link = f"{m.get('source_file','')}" + (f"#page={m['page']}" if m.get("page") else "")
-                cand.append(QuizQuestion(
-                    qtype="short",
-                    stem=f"Q{len(cand)+1} ({s['difficulty_target']}). Explain this point in your own words: \"{sent[:120]}...\"?",
-                    answer_key=sent, topic=d.metadata.get("topic", s["scope"]),
-                    source=link, difficulty=s["difficulty_target"],
-                    explanation=f"Key point: {sent[:200]} (See {link})"))
-                if len(cand) >= s["n_questions"]:
+                for sent in sents:
+                    low = sent.lower()
+                    # Basic junk filter even in relaxed mode
+                    if any(tok in low for tok in ("http", "www.", ".com", ".org", "com/qa", "com:", "login", "copyright", "name type", "owneruserid", "score integer", "creationdate")):
+                        continue
+                    if low.startswith(("therefore", "then", "however", "moreover", "furthermore", "also", "but ", "and ", "or ", "so ")):
+                        continue
+                    if not any(pat in low for pat in (" is ", " are ", " refers to", " means ", " involves ", " consists of", " defines ", " describes ", " enables ", " allows ", " provides ", " uses ", " relies on")):
+                        continue
+                    m = d.metadata
+                    if m.get("page"):
+                        link = f"{m.get('source_file','')}#page={m['page']}"
+                    elif m.get("slide"):
+                        link = f"{m.get('source_file','')}#slide={m['slide']}"
+                    elif m.get("t_start") is not None:
+                        mm, ss = divmod(int(m["t_start"]), 60)
+                        link = f"{m.get('source_file','')}?t={mm:02d}:{ss:02d}"
+                    else:
+                        link = m.get("source_file", "")
+                    cand.append(QuizQuestion(
+                        qtype="short",
+                        stem=f"Q{len(cand)+1} ({s['difficulty_target']}). Explain this point in your own words: \"{sent[:120]}...\"?",
+                        answer_key=sent, topic=d.metadata.get("topic", s["scope"]),
+                        source=link, difficulty=s["difficulty_target"],
+                        explanation=f"Key point: {sent[:200]} (See {link})"))
+                    if len(cand) >= n:
+                        break
+                if len(cand) >= n:
                     break
-    # LLM path is authoritative: keep whatever it produced even if hash-seen
-    # (dedup bank only gates the deterministic offline fallback).
-    seen = set() if used_llm else _load_hashes()
+    
+    # ALWAYS enforce exact n questions - trim or pad
+    seen = _load_hashes() if not used_llm else set()
     fresh = []
     for q in cand:
         h = hashlib.sha256(q.stem.strip().lower().encode()).hexdigest()[:12]
         q.qhash = h
         if h not in seen:
-            seen.add(h); fresh.append(q)
+            seen.add(h)
+            fresh.append(q)
+    
+    # Trim to exactly n
+    fresh = fresh[:n]
+    
+    # Pad if needed (should rarely happen with LLM, but safety)
+    while len(fresh) < n and docs:
+        d = docs[len(fresh) % len(docs)]
+        m = d.metadata
+        if m.get("page"):
+            link = f"{m.get('source_file','')}#page={m['page']}"
+        elif m.get("slide"):
+            link = f"{m.get('source_file','')}#slide={m['slide']}"
+        elif m.get("t_start") is not None:
+            mm, ss = divmod(int(m["t_start"]), 60)
+            link = f"{m.get('source_file','')}?t={mm:02d}:{ss:02d}"
+        else:
+            link = m.get("source_file", "")
+        concept = _extract_concept(d.page_content[:200])
+        fresh.append(QuizQuestion(
+            qtype="short",
+            stem=f"Q{len(fresh)} ({s['difficulty_target']}). {concept}: explain in your own words.",
+            answer_key=d.page_content[:300], topic=d.metadata.get("topic", s["scope"]),
+            source=link, difficulty=s["difficulty_target"],
+            explanation=f"Key point from {link}"))
+    
     if not used_llm:
         _save_hashes(seen)
-    s["questions"] = [q.model_dump() for q in fresh]
+    s["questions"] = [q.model_dump() for q in fresh[:n]]
     return s
-
-
-def _parse_quiz_text(out: str, scope: str, difficulty: str, source: str, n: int) -> list:
-    """Parse 'Q: ... A: ...' (possibly numbered) blocks into QuizQuestions."""
-    import re
-    cand = []
-    blocks = re.split(r"(?m)^\s*(?:\d+[.)]\s*)?Q\s*:", out)
-    for b in blocks[1:]:
-        parts = re.split(r"(?m)^\s*A\s*:", b, maxsplit=1)
-        stem = parts[0].strip()[:400]
-        key = parts[1].strip().splitlines()[0][:300] if len(parts) > 1 else "see context"
-        if len(stem) < 10:
-            continue
-        cand.append(QuizQuestion(qtype="short", stem=stem, answer_key=key, topic=scope,
-                                 source=source, difficulty=difficulty,
-                                 explanation=f"See {source}"))
-        if len(cand) >= n:
-            break
-    return cand
 
 
 def _quiz_worthy_sentences(text: str) -> list[str]:
     """Yield sentences that make sane quiz prompts. Rejects URLs, fragments,
-    discourse continuations (Therefore/Then/However...), questions, code."""
+    discourse continuations (Therefore/Then/However...), questions, code, table headers."""
     import re
     _bad_start = ("therefore", "then", "however", "moreover", "furthermore", "also",
                   "but ", "and ", "or ", "so ", "thus", "hence", "meanwhile", "next,",
@@ -130,12 +191,16 @@ def _quiz_worthy_sentences(text: str) -> list[str]:
                   "alternatively", "nevertheless", "nonetheless", "instead",
                   "com:", "http", "www.", "see figure", "as shown", "note that",
                   "it is important", "keep in mind", "getting started")
+    _table_junk = ("name type", "owneruserid", "score integer", "creationdate", "datetime",
+                   "com/qa", "qa:", "postid", "userid", "parentid", "acceptedanswerid")
     _definitional = (" is ", " are ", " refers to", " means ", " involves ",
                      " consists of", " defines ", " describes ", " enables ",
                      " allows ", " provides ", " uses ", " relies on")
     _bad_subj = ("it", "this", "that", "these", "those", "they", "them",
                  "he", "she", "we", "you", "if", "when", "while", "the",
-                 "chapter", "section", "getting", "alternatively", "maybe")
+                 "chapter", "section", "getting", "alternatively", "maybe",
+                 "classification", "detecting", "poor", "answers", "building",
+                 "machine", "learning", "systems", "python", "edition")
     out = []
     for raw in re.split(r"(?<=[.!?])\s+", text):
         s = " ".join(raw.split())
@@ -145,6 +210,8 @@ def _quiz_worthy_sentences(text: str) -> list[str]:
         if any(tok in low for tok in ("http", "www.", "#", ".com", ".org", "freenode",
                                       "irc", "://", "```", ">>>", "import ",
                                       "def ", "    ", "\t", "[", "]")):
+            continue
+        if any(tok in low for tok in _table_junk):
             continue
         if low.startswith(_bad_start) or s.endswith(("?", ":", ";")):
             continue

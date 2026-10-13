@@ -159,7 +159,7 @@ Run both together (two terminals):
 
 ```bash
 # terminal 1 — backend
-$PY -m uvicorn src.api.main:app --reload --port 8000
+$PY -m uvicorn src.api.main:app --reload --port 8050
 # terminal 2 — frontend
 $PY -m streamlit run src/ui/app.py --server.port 8501
 ```
