@@ -1,7 +1,6 @@
 1. Fix the chunking and add a LLM at end to compile the retrieved chunks into answer.
 2. Quiz generates random number of questions.
 asked for 4 generated 6
-
 Q1 (easy). Explain: Classification – Detecting Poor Answers [ 98 ] Name Type Description CreationDate DateTime This is the date of submission? [easy] Building Machine Learning Systems with Python - Second Edition.pdf#page=119
 
 your answer

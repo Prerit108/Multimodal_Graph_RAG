@@ -49,8 +49,7 @@ def n_expand(s: TutorState) -> TutorState:
         concepts = [d.metadata.get("concept", "") for d in s["docs"] if hasattr(d, "metadata")]
         extra = expand_prereqs([c for c in concepts if c])
         if extra:
-            # Store prereqs separately, don't pollute the question
-            s["prereqs"] = extra[:3]
+            s["question"] = s["question"] + f" (prereqs: {', '.join(extra[:3])})"
     return s
 
 
@@ -62,34 +61,16 @@ def n_generate(s: TutorState) -> TutorState:
         s["citations"] = []
         s["context"] = ""
         return s
-    
-    # Build context: dedup by content hash, limit to top 4 docs, max 2400 chars each
-    seen_hashes = set()
-    ctx_parts, cites = [], []
-    for d in s["docs"]:
-        if len(ctx_parts) >= 4:
-            break
-        content_hash = hash(d.page_content[:500])
-        if content_hash in seen_hashes:
-            continue
-        seen_hashes.add(content_hash)
+    ctx, cites = [], []
+    for d in s["docs"][:6]:
         m = d.metadata
         if m.get("page"): cite = f"[{m.get('source_file')}, p.{m['page']}]"
         elif m.get("slide"): cite = f"[{m.get('source_file')}, slide {m['slide']}]"
         elif m.get("t_start") is not None:
             mm, ss = divmod(int(m["t_start"]), 60); cite = f"[{m.get('source_file')}, {mm:02d}:{ss:02d}]"
         else: cite = f"[{m.get('source_file', 'source')}]"
-        ctx_parts.append(f"{cite} {d.page_content[:2400]}")
-        cites.append(cite)
-    
-    s["context"] = "\n\n---\n\n".join(ctx_parts)
-    s["citations"] = cites
-    
-    # Add prereqs to context if available, not to question
-    prereqs = s.get("prereqs", [])
-    if prereqs:
-        s["context"] = f"Prerequisite concepts: {', '.join(prereqs)}\n\n---\n\n" + s["context"]
-    
+        ctx.append(f"{cite} {d.page_content[:1200]}"); cites.append(cite)
+    s["context"] = "\n".join(ctx); s["citations"] = cites
     try:
         from src.chains.prompts import get_answer_chain, _content
         ans = _content(get_answer_chain().invoke(
@@ -97,26 +78,14 @@ def n_generate(s: TutorState) -> TutorState:
         if not ans.strip():
             raise ValueError("empty LLM answer")
         s["answer"] = ans
-        # Verify citations are referenced in answer
-        cited_sources = [c.split(",")[0][1:] for c in cites]
-        if not any(src in s["answer"] for src in cited_sources):
+        if not any(c.split(",")[0][1:] in s["answer"] for c in cites):
             s["answer"] += "\n\nSources: " + "; ".join(cites)
     except Exception:
-        # Fallback: structured summary instead of raw dump
         topic = (s["docs"][0].metadata.get("topic", "this topic") if s["docs"] else "this topic")
         mastery = get_mastery(s.get("student_id", "anon"), topic)
         level = "Simply put: " if mastery < 0.4 else ("In depth: " if mastery > 0.75 else "")
-        # Summarize top 2 context chunks with citations
-        summary_parts = []
-        for i, part in enumerate(ctx_parts[:2]):
-            cite = cites[i] if i < len(cites) else ""
-            # Extract first meaningful sentence
-            sentences = part.split(". ")
-            if sentences:
-                summary_parts.append(f"{cite} {sentences[0]}. ...")
-        s["answer"] = (f"{level}Based on your material, here's what I found:\n\n" + 
-                       "\n\n".join(summary_parts) + 
-                       f"\n\nSources: {'; '.join(cites)}")
+        s["answer"] = (f"{level}Based on your material:\n\n" + "\n".join(ctx[:3])
+                       + f"\n\nSources: {'; '.join(cites)}")
     return s
 
 
