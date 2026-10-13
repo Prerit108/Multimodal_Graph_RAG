@@ -192,9 +192,9 @@ Run the React frontend with the backend (two terminals):
 
 ```bash
 # terminal 1 — backend
-.\.backend-env\python.exe -m uvicorn src.api.main:app --reload --reload-dir src --port 8000
-# terminal 2 — React frontend
-npm run dev
+$PY -m uvicorn src.api.main:app --reload --port 8050
+# terminal 2 — frontend
+$PY -m streamlit run src/ui/app.py --server.port 8501
 ```
 
 ### 4. Notebook — guided walkthrough (26 cells)
