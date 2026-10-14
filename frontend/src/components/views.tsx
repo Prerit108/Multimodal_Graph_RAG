@@ -257,7 +257,7 @@ export function Tutor({ student }: { student: string }) {
 
 /* ========================================================== Quiz */
 export function Quiz({ student }: { student: string }) {
-  const [scope, setScope] = useState("photosynthesis");
+  const [scope, setScope] = useState("attention");
   const [n, setN] = useState(3);
   const [busy, setBusy] = useState(false);
   const [quiz, setQuiz] = useState<{ id: string; qs: Question[]; requested: number; shortfall: number; reason: string; dupes: number } | null>(null);

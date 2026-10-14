@@ -12,20 +12,32 @@ class Settings(BaseSettings):
     NVIDIA_NIM_API_KEY: str = ""
     NVIDIA_NIM_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
 
-    # Local LM Studio (OpenAI-compatible). Default to ornith models per user request.
-    LMSTUDIO_BASE_URL: str = "http://localhost:1234/v1"
-    LMSTUDIO_API_KEY: str = "lm-studio"
+    # OpenRouter (OpenAI-compatible gateway; `:free` model ids are free tier).
+    OPEN_ROUTER_API_KEY: str = ""
+    OPEN_ROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # Free-tier ids are individually rate-limited. Each role tries these in
+    # order, so a 429 on one model does not take down the demo.
+    GENERATOR_FALLBACKS: str = ("nvidia/nemotron-3-super-120b-a12b:free,"
+                                "nvidia/nemotron-3.5-lightning:free,"
+                                "cohere/north-mini-code:free,"
+                                "liquid/lfm-2.5-2.6b:free")
+    VERIFIER_FALLBACKS: str = ("google/gemma-4-31b-it:free,"
+                               "google/gemma-4-26b-a4b-it:free,"
+                               "nvidia/nemotron-3-super-120b-a12b:free")
 
-    GENERATOR_PROVIDER: str = "lmstudio"   # google | openai | nim | lmstudio
-    GENERATOR_MODEL: str = "ornith-1.5-9b"   # single local model for both roles
-    VERIFIER_PROVIDER: str = "lmstudio"      # same model (VRAM); cross-check is weaker
-    VERIFIER_MODEL: str = "ornith-1.5-9b"
+    GENERATOR_PROVIDER: str = "openrouter"  # openrouter | google | openai | nim
+    GENERATOR_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    VERIFIER_PROVIDER: str = "openrouter"   # different vendor = stronger cross-check
+    VERIFIER_MODEL: str = "google/gemma-4-31b-it:free"
     NIM_MODEL: str = "meta/llama-3.1-70b-instruct"
 
     # --- Vision (G0 image / diagram descriptions) ---
+    # OpenRouter free-tier text models cannot see images, so the VLM defaults to
+    # OpenAI's vision model when a key is present and falls back to a filename
+    # stub otherwise. Set VISION_MODEL explicitly to override.
     ENABLE_VLM: bool = True
-    VISION_PROVIDER: str = ""      # blank -> reuse GENERATOR_PROVIDER
-    VISION_MODEL: str = ""         # blank -> reuse GENERATOR_MODEL
+    VISION_PROVIDER: str = ""
+    VISION_MODEL: str = ""
     VLM_MAX_TOKENS: int = 1024
 
     # --- Reranker (cross-encoder, CPU-safe) ---
@@ -37,7 +49,7 @@ class Settings(BaseSettings):
     # --- Embeddings / vector store ---
     # Nomic-Embed-Text v1.5 local (GPU if VRAM allows, else CPU). Chroma stores
     # whatever dim the embedder returns — wipe data/chroma_db when switching.
-    EMBEDDING_PROVIDER: str = "nomic"  # nomic (local) | huggingface | lmstudio
+    EMBEDDING_PROVIDER: str = "nomic"  # nomic (local) | huggingface
     EMBEDDING_MODEL: str = "text-embedding-nomic-embed-text-v1.5"
     HF_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     NOMIC_MODEL: str = "nomic-ai/nomic-embed-text-v1.5"

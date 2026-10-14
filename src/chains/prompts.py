@@ -7,26 +7,40 @@ from src.schemas.models import CitationUnit
 
 
 def _content(msg) -> str:
-    """Extract text from a chat response. Reasoning models (e.g. ornith via LM
-    Studio) may put the answer in reasoning_content, or return content as a
-    list of blocks (text + reasoning), or cut content to '' on length limits."""
-    c = getattr(msg, "content", "") or ""
-    if isinstance(c, list):  # content blocks: [{type:text,...},{type:reasoning,...}]
-        texts = [b.get("text", "") for b in c
-                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text")]
-        if texts:
-            return "\n".join(texts)
-        c = ""
-    if isinstance(c, str) and c.strip():
-        return c
+    """Extract text from a chat response, never returning blank when text exists.
+
+    Reasoning models (the OpenRouter `:free` tier in particular) are inconsistent:
+    they may answer in `content`, in `reasoning_content`, or as a list of content
+    blocks, and a 200 response can arrive with an empty body. Try each shape.
+    """
+    def _flatten(x) -> str:
+        if isinstance(x, str):
+            return x
+        if isinstance(x, list):
+            parts = []
+            for b in x:
+                if isinstance(b, dict):
+                    t = b.get("text") or b.get("content") or ""
+                    if t:
+                        parts.append(str(t))
+                elif isinstance(b, str):
+                    parts.append(b)
+            return "\n".join(parts)
+        return ""
+
+    c = _flatten(getattr(msg, "content", "") or "")
+    if c.strip():
+        return c.strip()
+
     extra = getattr(msg, "additional_kwargs", {}) or {}
-    rc = extra.get("reasoning_content", "") or ""
-    if isinstance(rc, list):
-        rc = "\n".join(b.get("text", "") for b in rc if isinstance(b, dict))
-    # strip leaked "Thinking Process:" preamble if present
-    if "A:" in rc and "Thinking Process" in rc:
-        rc = rc.split("A:", 1)[-1]
-    return rc.strip() if isinstance(rc, str) else (c or "")
+    rc = _flatten(extra.get("reasoning_content", "") or "")
+    if rc.strip():
+        # strip leaked chain-of-thought preambles, keep the answer
+        for marker in ("\n\nA:", "\nA:"):
+            if marker in rc and ("Thinking Process" in rc or "Thinking" in rc):
+                rc = rc.split(marker, 1)[-1]
+        return rc.strip()
+    return ""
 
 TAG_PROMPT = ChatPromptTemplate.from_messages([
     ("system", "Tag the chunk into course/topic/subtopic/concept with difficulty. "

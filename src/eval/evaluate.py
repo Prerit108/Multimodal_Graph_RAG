@@ -21,7 +21,7 @@ def ragas_eval(testset: str = "eval/data/testset.jsonl") -> dict:
                 "hint": "pip install ragas datasets; add eval/data/testset.jsonl"}
 
 
-def simulate(profiles=("strong", "avg", "weak"), sessions: int = 5, scope: str = "photosynthesis") -> dict:
+def simulate(profiles=("strong", "avg", "weak"), sessions: int = 5, scope: str = "self-attention") -> dict:
     """3 profiles x N sessions through G2+G3; reports Δmastery + repetition rate.
 
     Isolated: uses fresh student ids per run and resets the dedup bank first,

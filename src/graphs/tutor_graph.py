@@ -124,6 +124,8 @@ def n_generate(s: TutorState) -> TutorState:
         from src.chains.prompts import get_answer_chain, _content
         ans = _content(get_answer_chain().invoke(
             {"context": s["context"], "question": s["question"]}))
+        # free-tier gateways intermittently return a 200 with an empty body; treat
+        # that as a miss so the grounded retrieval fallback below answers instead
         if not ans.strip():
             raise ValueError("empty LLM answer")
         ans = _strip_inline_cites(ans, cites)

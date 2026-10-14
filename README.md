@@ -143,10 +143,10 @@ $PY -m uvicorn src.api.main:app --reload --reload-dir src --port 8000
 
 | Endpoint | Example |
 |---|---|
-| `POST /ingest` (one file → G0) | `curl -F "file=@data/uploads/sample.txt" http://localhost:8000/ingest` |
+| `POST /ingest` (one file → G0) | `curl -F "file=@data/uploads/my_material.pdf" http://localhost:8000/ingest` |
 | `POST /ingest` (batch → G0) | `curl -F "files=@a.pdf" -F "files=@b.pptx" http://localhost:8000/ingest` |
-| `POST /chat` (G1 tutor) | `curl -X POST localhost:8000/chat -H 'Content-Type: application/json' -d '{"question":"What is photosynthesis?","student_id":"demo"}'` |
-| `POST /quiz` (G2 quiz) | `curl -X POST localhost:8000/quiz -H 'Content-Type: application/json' -d '{"scope":"photosynthesis","student_id":"demo","difficulty":"auto","n":3}'` |
+| `POST /chat` (G1 tutor) | `curl -X POST localhost:8000/chat -H 'Content-Type: application/json' -d '{"question":"What is multi-head attention?","student_id":"demo"}'` |
+| `POST /quiz` (G2 quiz) | `curl -X POST localhost:8000/quiz -H 'Content-Type: application/json' -d '{"scope":"attention","student_id":"demo","difficulty":"auto","n":3}'` |
 | `GET /mastery/{student_id}` (G3) | `curl http://localhost:8000/mastery/demo` |
 | `GET /history/{student_id}` | `curl http://localhost:8000/history/demo` |
 | `POST /quiz/grade` | `{"student_id":"demo","scope":"attention","quiz_id":"…","questions":[…],"answers":{"<qhash>":"…"}}` |
@@ -163,8 +163,8 @@ from src.graphs.ingest_graph import ingest_file
 from src.graphs.tutor_graph import ask
 from src.graphs.quiz_graph import build_quiz_graph, n_feedback
 
-ingest_file("data/uploads/sample.txt")
-ask("What is photosynthesis?", student_id="demo")
+ingest_file("data/uploads/my_material.pdf")
+ask("What is multi-head attention?", student_id="demo")
 ```
 
 ### 2. Web UI — React (port 5173)
@@ -174,11 +174,11 @@ The primary interface. Run the API first, then the dev server:
 ```bash
 # terminal 1 — backend
 $PY -m uvicorn src.api.main:app --reload --port 8000
-
 # terminal 2 — frontend
 cd frontend && npm install && npm run dev
 # open http://localhost:5173
 ```
+
 
 Vite proxies `/api/*` to `http://localhost:8000`, so the browser stays same-origin in
 dev. Point it elsewhere with `VITE_API_BASE_URL`. Production build: `npm run build`

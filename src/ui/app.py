@@ -160,7 +160,7 @@ with tab2:
 
 # ---------------------------------------------------------------- Quiz
 with tab3:
-    scope = st.text_input("Quiz scope/topic", "photosynthesis")
+    scope = st.text_input("Quiz scope/topic", "attention")
     n = st.slider("questions", 1, 8, 3)
     gen_col, clr_col = st.columns(2)
     if gen_col.button("Generate quiz", type="primary"):
