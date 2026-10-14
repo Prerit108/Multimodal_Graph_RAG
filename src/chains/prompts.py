@@ -35,8 +35,9 @@ TAG_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 ANSWER_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", "Answer ONLY from the context. Every factual claim needs an inline "
-               "citation like [file, p.N] / [file, slide N] / [file, MM:SS]. "
+    ("system", "Answer ONLY from the context. Write clean, flowing prose in your own words. "
+               "Do NOT insert bracketed markers, page numbers or file names anywhere in the "
+               "answer — citations are appended for you afterwards. "
                "If context is insufficient, say so explicitly."),
     ("human", "CONTEXT:\n{context}\n\nQUESTION: {question}"),
 ])

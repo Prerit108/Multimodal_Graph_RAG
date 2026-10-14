@@ -7,7 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.config.settings import get_settings
 
 
-def _lmstudio_chat(model: str, temperature: float):
+def _lmstudio_chat(model: str, temperature: float, max_tokens: int | None = None):
     """LM Studio via OpenAI-compatible endpoint (ChatOpenAI is a LangChain class).
 
     Reasoning models (ornith) spend most tokens on hidden reasoning: set a high
@@ -17,7 +17,7 @@ def _lmstudio_chat(model: str, temperature: float):
     s = get_settings()
     return ChatOpenAI(model=model, temperature=temperature,
                       base_url=s.LMSTUDIO_BASE_URL, api_key=s.LMSTUDIO_API_KEY,
-                      max_tokens=2048, max_retries=1, request_timeout=300)
+                      max_tokens=max_tokens or 2048, max_retries=1, request_timeout=300)
 
 
 def get_generator():
@@ -44,6 +44,28 @@ def get_verifier():
     if s.VERIFIER_PROVIDER == "lmstudio":
         return _lmstudio_chat(s.VERIFIER_MODEL, 0.0)
     return ChatGoogleGenerativeAI(model=s.VERIFIER_MODEL, temperature=0.0)
+
+
+def get_vision():
+    """Vision-capable chat model for describing images/diagrams (G0 image branch).
+
+    Defaults to the generator when the provider's model is already multimodal.
+    Never raises here — callers must treat failure as "describe me later" and fall
+    back to a filename-only stub so an image upload can never break ingestion.
+    """
+    s = get_settings()
+    provider = (s.VISION_PROVIDER or s.GENERATOR_PROVIDER).lower()
+    model = s.VISION_MODEL or s.GENERATOR_MODEL
+    if provider == "openai":
+        return ChatOpenAI(model=model, temperature=0.0, max_tokens=s.VLM_MAX_TOKENS)
+    if provider == "nim":
+        return ChatOpenAI(model=model, base_url=s.NVIDIA_NIM_BASE_URL,
+                          api_key=s.NVIDIA_NIM_API_KEY, temperature=0.0)
+    if provider == "lmstudio":
+        # reasoning models burn most of the budget on hidden reasoning, so give
+        # the vision call the same generous ceiling as the text ones
+        return _lmstudio_chat(model, 0.0, max_tokens=s.VLM_MAX_TOKENS)
+    return ChatGoogleGenerativeAI(model=model, temperature=0.0)
 
 
 @lru_cache

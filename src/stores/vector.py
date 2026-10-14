@@ -1,5 +1,7 @@
 """Vector store via LangChain only. Chroma default (installed); Qdrant optional."""
 from __future__ import annotations
+import shutil
+import sqlite3
 from pathlib import Path
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
@@ -7,6 +9,38 @@ from src.chains.models import get_embeddings
 from src.config.settings import get_settings
 
 _store = None
+
+
+def _reset_if_corrupt(dirpath: str) -> bool:
+    """Drop a Chroma directory whose sqlite file was left without its schema.
+
+    An interrupted run (Ctrl+C during first init, a killed process, a version
+    change) can leave a 0-byte `chroma.sqlite3`. Chroma then fails on every
+    later call with `no such table: collections` and retrying never recovers,
+    because the file is created on open but the schema write never committed.
+    Wiping it lets Chroma rebuild cleanly.
+
+    Guarded: this only fires when the `collections` table is genuinely absent,
+    so a real index is never destroyed.
+    """
+    db = Path(dirpath) / "chroma.sqlite3"
+    if not db.exists():
+        return False
+    try:
+        con = sqlite3.connect(db)
+        try:
+            rows = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='collections'"
+            ).fetchall()
+        finally:
+            con.close()
+        if rows:
+            return False
+        print(f"[chroma] {db} has no metadata tables (corrupt); rebuilding vector store")
+    except sqlite3.DatabaseError:
+        print(f"[chroma] {db} is unreadable; rebuilding vector store")
+    shutil.rmtree(dirpath, ignore_errors=True)
+    return True
 
 
 def get_store():
@@ -19,6 +53,7 @@ def get_store():
         _store = QdrantVectorStore.from_existing_collection(
             embedding=get_embeddings(), collection_name=s.COLLECTION, url=s.QDRANT_URL)
     else:
+        _reset_if_corrupt(s.CHROMA_DIR)
         _store = Chroma(collection_name=s.COLLECTION,
                         embedding_function=get_embeddings(),
                         persist_directory=s.CHROMA_DIR)

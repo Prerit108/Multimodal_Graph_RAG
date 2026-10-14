@@ -1,5 +1,6 @@
 """G1 TutorRAG: router -> hybrid_retrieve -> grade -> graph_expand -> generate -> verify -> answer|refuse."""
 from __future__ import annotations
+import re
 from typing import TypedDict, Optional, Literal
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -27,10 +28,16 @@ def n_retrieve(s: TutorState) -> TutorState:
 
 
 def n_grade(s: TutorState) -> TutorState:
-    """Keyword-overlap gate (threshold from settings); refuse only when truly no overlap."""
-    import re
-    q = set(re.findall(r"\w+", s["question"].lower()))
-    q = {w for w in q if len(w) > 2}
+    """Keyword-overlap gate (threshold from settings); refuse only when truly no overlap.
+
+    Common words are dropped first — otherwise filler like "the/won/world" in ordinary
+    book prose can clear the threshold for an off-topic question.
+    """
+    stop = {"the", "and", "for", "with", "that", "this", "from", "into", "what", "which",
+            "who", "whom", "whose", "how", "why", "when", "where", "are", "was", "were",
+            "does", "did", "can", "could", "would", "should", "have", "has", "had",
+            "you", "your", "our", "their", "they", "them", "its", "his", "her"}
+    q = {w for w in re.findall(r"\w+", s["question"].lower()) if len(w) > 2 and w not in stop}
     scored = []
     for d in s["docs"]:
         toks = set(re.findall(r"\w+", d.page_content.lower()))
@@ -53,6 +60,51 @@ def n_expand(s: TutorState) -> TutorState:
     return s
 
 
+def _citation(doc) -> str:
+    """Precise audit citation, e.g. '[notes.pdf, p.12]' (kept out of the answer body)."""
+    m = doc.metadata
+    if m.get("page"): return f"[{m.get('source_file')}, p.{m['page']}]"
+    if m.get("slide"): return f"[{m.get('source_file')}, slide {m['slide']}]"
+    if m.get("t_start") is not None:
+        mm, ss = divmod(int(m["t_start"]), 60)
+        return f"[{m.get('source_file')}, {mm:02d}:{ss:02d}]"
+    return f"[{m.get('source_file', 'source')}]"
+
+
+def _source_names(cites: list[str]) -> list[str]:
+    """Distinct source filenames from audit citations, order preserved."""
+    names, seen = [], set()
+    for c in cites:
+        name = re.sub(r"^\[|\]$", "", c).split(",")[0].strip() or "source"
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
+def _source_note(cites: list[str]) -> str:
+    """Compact, readable note: 'notes.pdf; book.pdf' — no page/slide clutter."""
+    return "; ".join(_source_names(cites))
+
+
+def _strip_inline_cites(ans: str, cites: list[str]) -> str:
+    """Drop '[file.pdf, p.12]' style markers the model may still emit, keep prose clean."""
+    names = _source_names(cites)
+    if not names:
+        return ans
+    alt = "|".join(re.escape(n) for n in names)
+    ans = re.sub(rf"\s*[\[(]\s*(?:{alt})[^\])]*[\])]", "", ans, flags=re.I)
+    ans = re.sub(r"[ \t]{2,}", " ", ans)
+    ans = re.sub(r"\s+([.,;:!?])", r"\1", ans)       # " ." -> "."
+    ans = re.sub(r"([(\[])\s+", r"\1", ans)
+    return ans.strip()
+
+
+def _readable(text: str) -> str:
+    """Collapse the hard line-wraps and column padding that PDF chunks carry."""
+    return " ".join(text.split())
+
+
 def n_generate(s: TutorState) -> TutorState:
     from src.stores.learner import get_mastery
     if s["verdict"] == "refuse":
@@ -61,31 +113,37 @@ def n_generate(s: TutorState) -> TutorState:
         s["citations"] = []
         s["context"] = ""
         return s
-    ctx, cites = [], []
-    for d in s["docs"][:6]:
-        m = d.metadata
-        if m.get("page"): cite = f"[{m.get('source_file')}, p.{m['page']}]"
-        elif m.get("slide"): cite = f"[{m.get('source_file')}, slide {m['slide']}]"
-        elif m.get("t_start") is not None:
-            mm, ss = divmod(int(m["t_start"]), 60); cite = f"[{m.get('source_file')}, {mm:02d}:{ss:02d}]"
-        else: cite = f"[{m.get('source_file', 'source')}]"
-        ctx.append(f"{cite} {d.page_content[:1200]}"); cites.append(cite)
-    s["context"] = "\n".join(ctx); s["citations"] = cites
+    docs = s["docs"][:6]
+    cites = [_citation(d) for d in docs]
+    # Context is fed WITHOUT citation markers — inline '[file, p.N]' prefixes are what
+    # used to leak into the middle of every sentence and made answers unreadable.
+    s["context"] = "\n\n---\n\n".join(d.page_content[:1200] for d in docs)
+    s["citations"] = cites
+    note = _source_note(cites)
     try:
         from src.chains.prompts import get_answer_chain, _content
         ans = _content(get_answer_chain().invoke(
             {"context": s["context"], "question": s["question"]}))
         if not ans.strip():
             raise ValueError("empty LLM answer")
+        ans = _strip_inline_cites(ans, cites)
+        if note:
+            ans = f"{ans}\n\nSources: {note}"
         s["answer"] = ans
-        if not any(c.split(",")[0][1:] in s["answer"] for c in cites):
-            s["answer"] += "\n\nSources: " + "; ".join(cites)
     except Exception:
         topic = (s["docs"][0].metadata.get("topic", "this topic") if s["docs"] else "this topic")
         mastery = get_mastery(s.get("student_id", "anon"), topic)
         level = "Simply put: " if mastery < 0.4 else ("In depth: " if mastery > 0.75 else "")
-        s["answer"] = (f"{level}Based on your material:\n\n" + "\n".join(ctx[:3])
-                       + f"\n\nSources: {'; '.join(cites)}")
+        # dedupe near-identical chunks, then flatten the PDF line-wrapping
+        body, seen_txt = [], set()
+        for d in docs[:3]:
+            flat = _readable(d.page_content)
+            if not flat or flat in seen_txt:
+                continue
+            seen_txt.add(flat)
+            body.append(flat)
+        s["answer"] = (f"{level}" + "\n\n".join(body)
+                       + (f"\n\nSources: {note}" if note else ""))
     return s
 
 

@@ -1,6 +1,6 @@
 """G2 QuizGraph: scope -> retrieve -> generate -> verify -> dedup -> feedback -> BKT -> report."""
 from __future__ import annotations
-import hashlib, json, os
+import hashlib, json, os, re
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from src.config.settings import get_settings
@@ -13,8 +13,14 @@ class QuizState(TypedDict):
     difficulty_target: str
     n_questions: int
     questions: list
+    pool: list                 # leftover candidates kept for top-up after verify/dedup
     results: list
     weak_topics: list
+    requested: int             # what the student asked for
+    generated: int             # what we could actually build
+    shortfall: int             # generated - requested (negative when short)
+    shortfall_reason: str      # human-readable explanation when short
+    dupes_dropped: int
 
 
 def n_scope(s: QuizState) -> QuizState:
@@ -24,79 +30,189 @@ def n_scope(s: QuizState) -> QuizState:
     return s
 
 
+def _source_link(m: dict) -> str:
+    return f"{m.get('source_file','')}" + (f"#page={m['page']}" if m.get("page") else "")
+
+
+_STEM_PREFIX = re.compile(r"^\s*Q\s*\d+\s*(?:\(\s*[^)]*\s*\)\s*)?[.):]?\s*", re.I)
+
+
+def _norm_stem(stem: str) -> str:
+    """Stem without its 'Qn (difficulty).' prefix and without the trailing
+    ': explain in your own words.' boilerplate — the part that actually
+    identifies the question."""
+    s = _STEM_PREFIX.sub("", (stem or "").strip()).lower()
+    s = re.sub(r"\s*:\s*explain in your own words\.?\s*$", "", s)
+    return " ".join(s.split())
+
+
+def _norm_key(key: str) -> str:
+    return " ".join((key or "").lower().split())
+
+
+def _degenerate(concept: str) -> bool:
+    """Reject junk concepts produced from formulas/fragments ('n', 'x = 5',
+    '[ 13 ]'). These make questions that read as nonsense to a student."""
+    c = (concept or "").strip()
+    if len(c) < 3 or len(c.split()) < 2:
+        return True
+    letters = sum(ch.isalpha() for ch in c)
+    if letters / max(1, len(c)) < 0.6:      # mostly digits/punctuation
+        return True
+    if re.fullmatch(r"[\W_\d]+", c):        # pure non-word
+        return True
+    return False
+
+
+def _fallback_candidates(docs: list, scope: str, difficulty: str, n: int) -> list:
+    """Offline question mining: one per DEFINITIONAL sentence (filtered).
+
+    Raw chapter text contains URLs, fragments, mid-paragraph continuations
+    ("Therefore, ...", "com: This Q&A site...") — never quiz those. Relaxes the
+    filter once rather than returning nothing when nothing strict qualifies.
+    """
+    import random
+    cand: list = []
+    shuffled = list(docs)
+    random.shuffle(shuffled)
+    seen: set = set()
+
+    def _add(sent: str, d) -> bool:
+        concept = _extract_concept(sent)
+        if _degenerate(concept):
+            return False
+        key = _norm_key(sent)
+        if key in seen:            # same source sentence mined twice
+            return False
+        seen.add(key)
+        m = d.metadata
+        link = _source_link(m)
+        cand.append(QuizQuestion(
+            qtype="short",
+            stem=f"{concept}: explain in your own words.",
+            answer_key=sent, topic=m.get("topic", scope), source=link, difficulty=difficulty,
+            explanation=f"Key point: {sent[:200]} (See {link})"))
+        return len(cand) >= n
+
+    for d in shuffled:
+        for sent in _quiz_worthy_sentences(d.page_content):
+            if _add(sent, d):
+                return cand
+
+    for i, d in enumerate(shuffled):  # relaxed pass: longer sentences, any subject
+        sents = [x.strip() for x in d.page_content.split(".") if 60 <= len(x.strip()) <= 300]
+        if not sents:
+            continue
+        sent = " ".join(sents[i % len(sents)].split())[:300]
+        if _add(sent, d):
+            return cand
+    return cand
+
+
+def _hash(q) -> str:
+    """Identity of a question for dedup: normalised stem plus the answer key.
+
+    Hashing the raw stem was the bug that let the same question through twice —
+    'Q1 (easy). n: explain…' and 'Q2 (easy). n: explain…' differ only in the
+    numbering, so they hashed differently while being the same question.
+    """
+    basis = _norm_stem(getattr(q, "stem", "") if not isinstance(q, dict) else q["stem"])
+    key = getattr(q, "answer_key", "") if not isinstance(q, dict) else q["answer_key"]
+    return hashlib.sha256((basis + "||" + _norm_key(key)).encode()).hexdigest()[:12]
+
+
+def _top_up(s: QuizState, extra: list) -> None:
+    """Pad questions back to n_questions. Without this, an under-delivering LLM,
+    dedup, and the verifier each shaved the quiz down to an arbitrary length."""
+    need = s["n_questions"] - len(s["questions"])
+    if need <= 0:
+        s["questions"] = s["questions"][:s["n_questions"]]
+        return
+    have = {q["qhash"] for q in s["questions"]}
+    have |= {q.get("qhash") for q in extra if q.get("qhash")}
+    for q in extra:  # pool first (unused LLM candidates), then fresh mined ones
+        if need <= 0:
+            break
+        if q.get("qhash"):
+            if q["qhash"] in have:
+                continue
+            have.add(q["qhash"])
+        s["questions"].append(q)
+        need -= 1
+
+
 def n_generate(s: QuizState) -> QuizState:
     from src.stores.vector import hybrid_search
-    docs = hybrid_search(f"{s['scope']} {s['difficulty_target']} questions", k=6, topic=None)
-    ctx = "\n".join(d.page_content[:800] for d in docs)
+    s.setdefault("pool", [])
+    n = s["n_questions"]
+    # Widen the window with n: a fixed k=6 starves the offline miner, which is what
+    # made the returned question count drift below what the student asked for.
+    docs = hybrid_search(f"{s['scope']} {s['difficulty_target']} questions",
+                         k=max(6, n * 3), topic=None)
     src = docs[0].metadata.get("source_file", "") if docs else ""
     used_llm = False
+    pool: list = []
     try:
         from src.chains.prompts import get_quiz_chain, _content
         out = _content(get_quiz_chain().invoke(
-            {"n": s["n_questions"], "types": "MCQ/short/numerical",
+            {"n": n, "types": "MCQ/short/numerical",
              "scope": s["scope"], "difficulty": s["difficulty_target"],
-             "context": ctx}))
-        cand = _parse_quiz_text(out, scope=s["scope"], difficulty=s["difficulty_target"],
-                                source=src, n=s["n_questions"])
-        if not cand:
+             "context": "\n".join(d.page_content[:800] for d in docs)}))
+        # parse the whole response; slicing to n here would discard usable questions
+        all_cand = _parse_quiz_text(out, scope=s["scope"], difficulty=s["difficulty_target"],
+                                    source=src, n=10 ** 6)
+        if not all_cand:
             if not out.strip():
                 raise ValueError("empty LLM quiz output")  # -> offline fallback
-            cand = [QuizQuestion(qtype="short", stem=out[:500], answer_key="see context",
-                                 topic=s["scope"], source=src, difficulty=s["difficulty_target"],
-                                 explanation="Generated from retrieved context.")]
+            all_cand = [QuizQuestion(qtype="short", stem=out[:500], answer_key="see context",
+                                    topic=s["scope"], source=src, difficulty=s["difficulty_target"],
+                                    explanation="Generated from retrieved context.")]
         used_llm = True
     except Exception:
-        # offline fallback: one question per DEFINITIONAL sentence (filtered).
-        # Raw chapter text contains URLs, fragments, mid-paragraph continuations
-        # ("Therefore, ...", "com: This Q&A site...") — never quiz those.
-        cand = []
-        import random, re
-        random.shuffle(docs)
-        for i, d in enumerate(docs[:s["n_questions"] * 4]):
-            if len(cand) >= s["n_questions"]:
-                break
-            for sent in _quiz_worthy_sentences(d.page_content):
-                m = d.metadata
-                link = f"{m.get('source_file','')}" + (f"#page={m['page']}" if m.get("page") else "")
-                concept = _extract_concept(sent)
-                cand.append(QuizQuestion(
-                    qtype="short",
-                    stem=f"Q{len(cand)+1} ({s['difficulty_target']}). {concept}: explain in your own words.",
-                    answer_key=sent, topic=d.metadata.get("topic", s["scope"]),
-                    source=link, difficulty=s["difficulty_target"],
-                    explanation=f"Key point: {sent[:200]} (See {link})"))
-                if len(cand) >= s["n_questions"]:
-                    break
-        if not cand:
-            # strict filter found nothing quiz-worthy: relax once (allow longer
-            # subjects) rather than returning zero questions
-            for i, d in enumerate(docs[:s["n_questions"] * 2]):
-                sents = [x.strip() for x in d.page_content.split(".") if 60 <= len(x.strip()) <= 300]
-                if not sents:
-                    continue
-                sent = " ".join(sents[i % len(sents)].split())[:300]
-                m = d.metadata
-                link = f"{m.get('source_file','')}" + (f"#page={m['page']}" if m.get("page") else "")
-                cand.append(QuizQuestion(
-                    qtype="short",
-                    stem=f"Q{len(cand)+1} ({s['difficulty_target']}). Explain this point in your own words: \"{sent[:120]}...\"?",
-                    answer_key=sent, topic=d.metadata.get("topic", s["scope"]),
-                    source=link, difficulty=s["difficulty_target"],
-                    explanation=f"Key point: {sent[:200]} (See {link})"))
-                if len(cand) >= s["n_questions"]:
-                    break
+        all_cand = _fallback_candidates(docs, s["scope"], s["difficulty_target"], n * 6)
+
     # LLM path is authoritative: keep whatever it produced even if hash-seen
     # (dedup bank only gates the deterministic offline fallback).
     seen = set() if used_llm else _load_hashes()
-    fresh = []
-    for q in cand:
-        h = hashlib.sha256(q.stem.strip().lower().encode()).hexdigest()[:12]
+    fresh, dupes = [], 0
+    in_run: set = set()            # catch repeats within this same quiz
+    for q in all_cand:
+        h = _hash(q)
         q.qhash = h
-        if h not in seen:
-            seen.add(h); fresh.append(q)
+        d = q.model_dump()
+        d["qhash"] = h
+        if h in in_run:
+            dupes += 1
+            continue                # never show the same question twice in one quiz
+        if h in seen:
+            pool.append(d)          # already served before -> reuse as top-up filler
+        else:
+            seen.add(h)
+            in_run.add(h)
+            fresh.append(d)
     if not used_llm:
         _save_hashes(seen)
-    s["questions"] = [q.model_dump() for q in fresh]
+    s["questions"] = fresh[:n]
+    pool.extend(fresh[n:])
+    s["pool"] = pool
+    if len(s["questions"]) < n:
+        _top_up(s, list(pool) + [
+            {**q.model_dump(), "qhash": _hash(q)}
+            for q in _fallback_candidates(docs, s["scope"], s["difficulty_target"], n * 6)
+        ])
+    s["requested"] = n
+    s["generated"] = len(s["questions"])
+    s["shortfall"] = max(0, n - len(s["questions"]))
+    s["dupes_dropped"] = dupes
+    if s["shortfall"]:
+        s["shortfall_reason"] = (
+            f"Only {s['generated']} distinct question(s) could be built from the "
+            f"material retrieved for '{s['scope']}'. Ingest more content on this "
+            f"topic, narrow the scope, or lower the count."
+            + (f" {dupes} duplicate(s) were discarded." if dupes else "")
+        )
+    else:
+        s["shortfall_reason"] = ""
     return s
 
 
@@ -198,7 +314,10 @@ def reset_bank() -> None:
 
 def n_verify(s: QuizState) -> QuizState:
     """Blind re-answer check for short/numerical; MCQ key sanity; sympy for numerical.
-    Drops questions the verifier marks NOT_SUPPORTED (unless verifier errors -> keep)."""
+    Drops questions the verifier marks NOT_SUPPORTED (unless verifier errors -> keep),
+    then tops the quiz back up so the student still gets n_questions."""
+    s.setdefault("pool", [])
+    s.setdefault("shortfall_reason", "")
     try:
         from src.chains.prompts import get_verify_chain, _content
         chain = get_verify_chain()
@@ -226,6 +345,20 @@ def n_verify(s: QuizState) -> QuizState:
         s["questions"] = keep
     except Exception:
         pass
+    if len(s["questions"]) < s["n_questions"]:
+        used = {q["qhash"] for q in s["questions"]}
+        s["pool"] = [q for q in s["pool"] if q.get("qhash") not in used]
+        _top_up(s, s["pool"])
+    # verification can drop questions after generate, so recompute the final count
+    s["generated"] = len(s["questions"])
+    s["shortfall"] = max(0, s["n_questions"] - s["generated"])
+    if s["shortfall"] and not s["shortfall_reason"]:
+        s["shortfall_reason"] = (
+            f"Only {s['generated']} of {s['n_questions']} questions survived "
+            f"answer verification. Ingest more material on '{s['scope']}' to widen the pool."
+        )
+    elif not s["shortfall"]:
+        s["shortfall_reason"] = ""
     return s
 
 

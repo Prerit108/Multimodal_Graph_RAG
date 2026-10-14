@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     VERIFIER_MODEL: str = "ornith-1.5-9b"
     NIM_MODEL: str = "meta/llama-3.1-70b-instruct"
 
+    # --- Vision (G0 image / diagram descriptions) ---
+    ENABLE_VLM: bool = True
+    VISION_PROVIDER: str = ""      # blank -> reuse GENERATOR_PROVIDER
+    VISION_MODEL: str = ""         # blank -> reuse GENERATOR_MODEL
+    VLM_MAX_TOKENS: int = 1024
+
     # --- Reranker (cross-encoder, CPU-safe) ---
     RERANKER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     RERANKER_DEVICE: str = "cpu"           # force cpu: GPU VRAM held by LM Studio
@@ -46,6 +52,9 @@ class Settings(BaseSettings):
     GRADE_THRESHOLD: float = 0.35
     CHUNK_SIZE: int = 900
     CHUNK_OVERLAP: int = 135
+
+    # --- Uploads ---
+    UPLOAD_DIR: str = "data/uploads"
 
     # --- Persistence ---
     CHECKPOINT_DB: str = "data/checkpoints/graph.db"

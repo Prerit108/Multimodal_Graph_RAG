@@ -2,17 +2,19 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # project root (for `src.*`)
+from src.config.paths import upload_path
 from src.graphs.ingest_graph import ingest_file
 from src.graphs.tutor_graph import ask
 from src.graphs.quiz_graph import build_quiz_graph, n_feedback
 from src.stores.learner import all_mastery
 from src.eval.evaluate import simulate
 
-open("data/uploads/sample.txt", "w").write(
+SAMPLE = upload_path("sample.txt")
+Path(SAMPLE).write_text(
     "Photosynthesis converts light energy into chemical energy in chloroplasts. "
     "Chlorophyll absorbs red and blue light. The Calvin cycle fixes carbon dioxide into glucose.")
 print("INGEST:", {k: (len(v) if isinstance(v, list) else v)
-                  for k, v in ingest_file("data/uploads/sample.txt").items() if k in ("kind", "units", "errors")})
+                  for k, v in ingest_file(SAMPLE).items() if k in ("kind", "units", "errors")})
 r = ask("What is photosynthesis?", student_id="smoke")
 print("ASK:", r["verdict"], "|", r["answer"][:200], "|", r["citations"])
 r2 = ask("Who won the 2026 football world cup?", student_id="smoke")

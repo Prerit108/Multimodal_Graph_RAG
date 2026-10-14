@@ -1,6 +1,7 @@
 """G0 IngestionGraph: load -> split -> tag -> embed_upsert -> graph edges."""
 from __future__ import annotations
-import os, hashlib
+import os, hashlib, base64
+from pathlib import Path
 from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
 from langchain_core.documents import Document
@@ -27,6 +28,70 @@ def _kind(path: str) -> str:
     return "pdf"
 
 
+def _clean_meta(md: dict) -> dict:
+    """Keep only Chroma-safe scalar metadata; drop nested Docling blobs."""
+    return {k: v for k, v in md.items()
+            if v is None or isinstance(v, (str, int, float, bool))}
+
+
+def _describe_with_vlm(path: str, filename: str) -> str:
+    """Ask a vision model what the image/diagram shows. Returns '' on any failure
+    so the caller can fall back to a filename-only stub."""
+    try:
+        from src.config.settings import get_settings
+        from src.chains.models import get_vision
+        from langchain_core.messages import HumanMessage
+        s = get_settings()
+        if not s.ENABLE_VLM:
+            return ""
+        data_url = "data:image/%s;base64,%s" % (
+            (path.rsplit(".", 1)[-1] or "png").lower(),
+            base64.b64encode(Path(path).read_bytes()).decode())
+        msg = HumanMessage(content=[
+            {"type": "text", "text": (
+                "Describe this image or diagram for a study index. In 2-4 sentences: what it "
+                "depicts, the labelled parts/components, and any relationship or process shown. "
+                "Transcribe short text labels. If it is purely decorative, say so.")},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ])
+        from src.chains.prompts import _content
+        return _content(get_vision().invoke([msg])).strip()
+    except Exception:
+        return ""
+
+
+def _image_stub(path: str) -> str:
+    """Last-resort description so the file is still searchable/quotable."""
+    return f"Image: {os.path.basename(path)} (no description available)."
+
+
+def _load_images(path: str) -> list:
+    """Docling OCR/layout first, VLM description for the picture itself, stub last."""
+    from langchain_core.documents import Document
+    filename = os.path.basename(path)
+    docs: list[Document] = []
+    try:
+        from langchain_docling import DoclingLoader
+        for d in DoclingLoader(file_path=path).load():
+            d.metadata = _clean_meta(d.metadata)
+            d.metadata.setdefault("source_file", filename)
+            d.metadata.setdefault("content_type", "image")
+            if d.page_content.strip():
+                docs.append(d)
+    except Exception:
+        pass  # Docling/clipboard/OCR failures are non-fatal — VLM path below still runs
+
+    desc = _describe_with_vlm(path, filename)
+    if desc:
+        docs.append(Document(page_content=f"{filename}: {desc}",
+                             metadata={"source_file": filename,
+                                       "content_type": "figure" if len(docs) == 0 else "image_vlm"}))
+    if not docs:
+        docs.append(Document(page_content=_image_stub(path),
+                             metadata={"source_file": filename, "content_type": "image"}))
+    return docs
+
+
 def n_load(state: IngestState) -> IngestState:
     path = state["file"]
     kind = _kind(path)
@@ -47,17 +112,15 @@ def n_load(state: IngestState) -> IngestState:
                                  metadata={"source_file": os.path.basename(path),
                                            "content_type": "video", "t_start": 0.0}))
         elif kind == "image":
-            from langchain_docling import DoclingLoader
-            docs = DoclingLoader(file_path=path).load()
-            for d in docs:
-                d.metadata.setdefault("source_file", os.path.basename(path))
-                d.metadata.setdefault("content_type", "image")
+            docs = _load_images(path)
         else:  # pdf via Docling (primary)
             try:
                 from langchain_docling import DoclingLoader
                 loader = DoclingLoader(file_path=path)
                 docs = loader.load()
                 for d in docs:
+                    # Docling attaches a nested `docling_metadata` dict that Chroma rejects
+                    d.metadata = _clean_meta(d.metadata)
                     d.metadata.setdefault("source_file", os.path.basename(path))
                     d.metadata.setdefault("content_type", "textbook")
                     if "page" not in d.metadata and "page_number" in d.metadata:
@@ -118,7 +181,7 @@ def n_tag(state: IngestState) -> IngestState:
 def n_upsert(state: IngestState) -> IngestState:
     from src.stores.vector import add_documents
     docs = [Document(page_content=u["text"],
-                     metadata={k: v for k, v in u.items() if k != "text" and v is not None})
+                     metadata=_clean_meta({k: v for k, v in u.items() if k != "text"}))
             for u in state["units"] if u.get("text", "").strip()]
     if docs:
         add_documents(docs)
