@@ -50,9 +50,22 @@ def _norm_key(key: str) -> str:
     return " ".join((key or "").lower().split())
 
 
+_DANGLING = {"such", "these", "this", "that", "those", "it", "they", "them",
+             "he", "she", "we", "you", "his", "her", "its", "their", "our",
+             "both", "all", "some", "any", "each", "every", "other", "others",
+             "many", "most", "one", "two", "above", "below", "here", "there",
+             "another", "as", "so", "then", "now", "well", "first", "second",
+             "third", "last", "next", "once", "thus", "hence", "however",
+             "moreover", "furthermore", "also", "again", "still", "yet"}
+
+
 def _degenerate(concept: str) -> bool:
-    """Reject junk concepts produced from formulas/fragments ('n', 'x = 5',
-    '[ 13 ]'). These make questions that read as nonsense to a student."""
+    """Reject junk concepts produced from formulas and sentence fragments.
+
+    'n', 'x = 5' and '[ 13 ]' are obvious junk; so are dangling references like
+    'Such models' or 'These results' — the student sees a question whose subject
+    was never actually named in the source.
+    """
     c = (concept or "").strip()
     if len(c) < 3 or len(c.split()) < 2:
         return True
@@ -60,6 +73,17 @@ def _degenerate(concept: str) -> bool:
     if letters / max(1, len(c)) < 0.6:      # mostly digits/punctuation
         return True
     if re.fullmatch(r"[\W_\d]+", c):        # pure non-word
+        return True
+    first = c.split()[0].lower().strip(".,;:")
+    if first in _DANGLING:                  # never starts from a back-reference
+        return True
+    # never ends on a dangling function word ("As such, the query", "... of the")
+    if c.split()[-1].lower().strip(".,;:") in _DANGLING | {
+            "as", "of", "in", "on", "for", "with", "to", "and", "or", "but", "by",
+            "from", "at", "into", "than", "then", "when", "while", "which", "who",
+            "is", "are", "was", "were", "be", "been", "has", "have", "had", "can",
+            "will", "would", "should", "could", "may", "might", "must", "not", "no",
+            "very", "more", "most", "less", "least", "such", "both", "same", "own"}:
         return True
     return False
 
@@ -149,6 +173,20 @@ def n_generate(s: QuizState) -> QuizState:
     # made the returned question count drift below what the student asked for.
     docs = hybrid_search(f"{s['scope']} {s['difficulty_target']} questions",
                          k=max(6, n * 3), topic=None)
+    # A scope the student has no material for used to silently produce a quiz
+    # mined from whatever came back. Say so instead of inventing questions.
+    scope_terms = {w for w in re.findall(r"\w+", s["scope"].lower()) if len(w) > 2}
+    if scope_terms and docs:
+        best = max((len(scope_terms & set(re.findall(r"\w+", d.page_content.lower())))
+                    / len(scope_terms) for d in docs), default=0.0)
+        if best < 0.34:
+            s["questions"], s["pool"] = [], []
+            s["requested"], s["generated"] = n, 0
+            s["shortfall"], s["dupes_dropped"] = n, 0
+            s["shortfall_reason"] = (
+                f"No material about '{s['scope']}' was found in your library. "
+                f"Ingest a document covering that topic, or pick a scope you have.")
+            return s
     src = docs[0].metadata.get("source_file", "") if docs else ""
     used_llm = False
     pool: list = []
