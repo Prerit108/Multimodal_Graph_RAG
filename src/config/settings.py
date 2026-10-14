@@ -32,12 +32,14 @@ class Settings(BaseSettings):
     NIM_MODEL: str = "meta/llama-3.1-70b-instruct"
 
     # --- Vision (G0 image / diagram descriptions) ---
-    # OpenRouter free-tier text models cannot see images, so the VLM defaults to
-    # OpenAI's vision model when a key is present and falls back to a filename
-    # stub otherwise. Set VISION_MODEL explicitly to override.
+    # OpenRouter's general free tier is text-only, but the Nemotron omni model is
+    # multimodal on the free tier, so image/diagram description works with no
+    # extra key. Falls back to a filename stub if it is unavailable.
     ENABLE_VLM: bool = True
-    VISION_PROVIDER: str = ""
-    VISION_MODEL: str = ""
+    VISION_PROVIDER: str = "openrouter"
+    VISION_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    VISION_FALLBACKS: str = ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,"
+                             "nvidia/nemotron-3-super-120b-a12b:free")
     VLM_MAX_TOKENS: int = 1024
 
     # --- Reranker (cross-encoder, CPU-safe) ---

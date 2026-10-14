@@ -115,18 +115,25 @@ def get_vision():
     back to a filename-only stub so an image upload can never break ingestion.
     """
     s = get_settings()
-    # OpenRouter's free tier is text-only, so a vision model must come from
-    # elsewhere: prefer an explicit override, then OpenAI, then Gemini.
-    if s.VISION_MODEL:
-        provider, model = (s.VISION_PROVIDER or "openrouter").lower(), s.VISION_MODEL
-    elif s.OPENAI_API_KEY:
-        provider, model = "openai", "gpt-4o-mini"
-    elif s.GOOGLE_API_KEY:
-        provider, model = "google", "gemini-2.0-flash"
-    else:
-        provider, model = (s.VISION_PROVIDER or s.GENERATOR_PROVIDER).lower(), s.GENERATOR_MODEL
+    # Preference order: an explicit override, then OpenAI/Gemini if a key is
+    # present, then the multimodal free OpenRouter model.
+    if s.VISION_PROVIDER == "openrouter" or (s.VISION_MODEL and s.VISION_PROVIDER == "openrouter"):
+        chain = [s.VISION_MODEL] + [m.strip() for m in s.VISION_FALLBACKS.split(",") if m.strip()]
+        chain = [m for m in dict.fromkeys(chain) if m]
+        if chain:
+            return RunnableLambda(FailoverChat(chain, 0.0, s.VLM_MAX_TOKENS).invoke)
+    provider = (s.VISION_PROVIDER or "").lower()
+    model = s.VISION_MODEL
+    if not model:
+        if s.OPENAI_API_KEY:
+            provider, model = "openai", "gpt-4o-mini"
+        elif s.GOOGLE_API_KEY:
+            provider, model = "google", "gemini-2.0-flash"
+        else:
+            return RunnableLambda(
+                FailoverChat([s.GENERATOR_MODEL], 0.0, s.VLM_MAX_TOKENS).invoke)
     if provider == "openrouter":
-        return _openrouter_chat(model, 0.0, max_tokens=s.VLM_MAX_TOKENS)
+        return RunnableLambda(FailoverChat([model], 0.0, s.VLM_MAX_TOKENS).invoke)
     if provider == "openai":
         return ChatOpenAI(model=model, temperature=0.0, max_tokens=s.VLM_MAX_TOKENS)
     if provider == "nim":
